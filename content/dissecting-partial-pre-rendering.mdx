@@ -1,0 +1,146 @@
+---
+title: 'Dissecting Partial Pre Rendering'
+publishedAt: ''
+summary: ''
+---
+
+## Prelude
+
+In my previous blog post, [How I Built My Portfolio](/blogs/how-i-built-my-portfolio), I discussed the technologies I used to create my portfolio site. While discussing Next.js, I gave a very high-level explanation of what partial pre-rendering is.
+
+In this post, I will dive deep into how partial pre-rendering works. I will also share my thoughts on whether you should consider using it or if it's just another hype train in the JavaScript ecosystem.
+
+## Rendering Strategies
+
+Over the years, innovations in web development have led to different strategies for delivering content on the internet. Let's quickly review these strategies:
+
+- **Static Content**
+- **Server-Side Rendering (SSR)**
+- **Client-Side Rendering (CSR)**
+- **Static Site Generation (SSG)**
+
+We'll go over each of them briefly to ensure we have a common understanding and avoid confusion.
+
+### Static Content
+
+As the web started to become a mainstream platform for consuming information, people began sharing information by writing HTML documents. All the information was written as static markup and published to the internet. Each time something new needed to be shared, we would add another HTML document, and everything worked seamlessly.
+
+### Server Side Rendering
+
+Static content served its purpose, but it became challenging as web applications grew more dynamic. Consider a product details page as an example: the layout, styling, and markup remain the same across different products, with only the actual content varying. If you have 10 products to display, you'd need to duplicate the same markup with different content 10 times. Just copy-pasting seems easy at first, but imagine maintaining this for hundreds of pages or making design changes—it quickly becomes a daunting task.
+
+Server Side Rendering (SSR) addresses these challenges by having a server handle the rendering. With SSR, your content resides in a database, and when a user requests the details page of a product, the server retrieves the content and generates a new HTML document using templates. This approach allows for dynamic content generation on the server before sending it to the client, providing a personalized and efficient user experience.
+
+### Client Side Rendering
+
+Okay, SSR solved the problems we had, right? Then why did front-end frameworks like React, Angular, etc., become so popular and push the entire developer ecosystem to build websites rendered by the browser instead of a server? The answer is rich interactivity. With Client Side Rendering (CSR), we can provide instantaneous feedback to the user, thereby offering a native experience. In this approach, JavaScript on the client is responsible for constructing the entire web page from a blank HTML document with some script tags to load the actual JS. Whenever the page requires more data, an API call can be made to a backend hosted independently, which provides the required data in a format agreed upon by the client and server (e.g., JSON).
+
+#### The Problem with CSR
+
+1. **Poor SEO:** Since the entire web page is constructed by the client, there will be poor SEO as crawlers cannot execute JS. Additionally, when the page loads, there is no meaningful content, which severely affects the indexing of web pages by search engines.
+   > People argue that crawlers can now execute JS and index CSR'ed websites, but I still believe an HTML document with full meaningful content will always have the upper hand.
+2. **The Loading Spinners Hell:** The most irritating problem I call "The Loading Spinners Hell." Let's break this down in detail because this is interesting:
+
+   - **Step 1:** Your HTML document loads <LoadingSpinner className='fill-foreground inline-block' /> (1)
+   - **Step 2:** JS starts to render the page.
+   - **Step 3:** Oh wait, I need more data to render this part of the page; I'll get it from the API. Meanwhile... <LoadingSpinner className='fill-foreground inline-block' /> (2)
+   - **Step 4:** I got the data; let's continue rendering. Oh wait, I need more data to finish rendering this part; I'll get it from the API. Meanwhile... <LoadingSpinner className='fill-foreground inline-block'/> (3)
+   - **Step 5:** Repeat Step 4 another 3-4 times.
+   - **Step 6:** Finally, my UI is ready to interact!
+
+   Trust me, I am not joking. This happens in real production applications used by real users, and I have experienced this myself. Unfortunately, we cannot avoid this as our requirements grow larger and more complex.
+
+   > I don’t know if you are getting irritated or not, but for me, seeing those three spinners at a time makes my head spin!!!
+
+### Static Site Generation
+
+Static Site Generation (SSG) is an advanced version of static content. With SSG, you can write the markup more intuitively using markdown or React (with Next.js). At build time, your custom code is transformed into plain HTML, CSS, and JS, which can be deployed to a CDN. This approach ensures fast initial page loads since all the content is already present, resulting in excellent SEO and good core web vitals. The downside is that there won't be any dynamic content. This strategy is extremely useful for writing articles, documentation, etc.
+
+Now that we have a solid understanding of how different web rendering strategies work, let's address the elephant in the room "Partial Pre-Rendering".
+
+## Partial Pre-Rendering
+
+Partial Pre-Rendering is a feature that allows static portions of a route to be pre-rendered and served from the cache, with dynamic content streamed in, all in a single HTTP request. ([The official definition as per Next.js docs](https://nextjs.org/docs/app/api-reference/next-config-js/partial-prerendering))
+
+There are some big words in this definition, so let's break them down step by step.
+
+### Chapter 1 - The Why
+
+We have briefly gone through various rendering strategies. Each has its own set of pros and cons, and we can choose any one of them according to our requirements. Trust me, if the right solution is picked based on the project's needs, it will work flawlessly.
+
+But why invent another technology and make things more complicated?
+
+Because we are humans, and humans are greedy. We want all the pros of all the rendering strategies so that everyone is happy and we can earn millions 🤑🤑
+
+Just kidding. But what if there existed an ideal technology that actually combined all the best parts of the techniques we discussed earlier?
+
+**[Vercel](https://vercel.com)** saw an opportunity here, invested their resources, and I must say they actually did it.
+
+Yes, Partial Pre-Rendering is exactly that. It combines all the good parts of the rendering strategies we discussed until now.
+
+### Chapter 2 - The How
+
+Partial Pre-Rendering (PPR) is a new experimental feature introduced in [Next.js 14](https://nextjs.org/blog/next-14#partial-prerendering-preview). To understand how PPR works, a basic understanding of React and Next.js is beneficial. However, even if you're new to these technologies, you should still grasp the implementation theory.
+
+Next.js is a meta-framework for React that offers powerful features on top of React, such as server-side rendering, file-based routing, and more.
+
+With the introduction of the new App Router in Next.js 13, the framework heavily leverages streaming and concurrent features of React.js. The App Router utilizes all the features of server-side React, such as React Server Components (RSCs), Suspense Boundaries, and Streaming.
+
+Since PPR is still an experimental feature, it is only available in the canary channels. So you need to use `next@canary` or `next@rc`. (PPR should not be used in production with real users.)
+
+PPR is built on top of [React Server Components](https://react.dev/reference/rsc/server-components) and [Suspense Boundaries](https://react.dev/reference/react/Suspense), so there are no new APIs to learn. You use the concepts you are already familiar with.
+
+When PPR is enabled, all the content is treated as static content, meaning it will be the same for every user. If the part of a page needs to have dynamic content rendered on a per-request basis, that particular component can be wrapped inside a Suspense boundary.
+
+Let's Understand this with an Example:
+
+Consider a Landing Page of a Next millions Dollar SaaS Bussiness as shown below
+
+![Output 1](/blogs/dissecting-partial-pre-rendering/output-1.png)
+
+The corresponding JSX to render this page looks like this:
+
+```tsx
+import Image from 'next/image';
+
+export default function Home() {
+  return (
+    <div className='flex min-h-[100dvh] flex-col'>
+      <section className='w-full pt-12 md:pt-24 lg:pt-32'>
+        <div className='container space-y-10 xl:space-y-16'>
+          <div className='grid gap-4 px-10 md:grid-cols-2 md:gap-16'>
+            <div>
+              <h1 className='lg:leading-tighter text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl xl:text-[3.4rem] 2xl:text-[3.75rem]'>
+                Trusted by Businesses Worldwide
+              </h1>
+              <p className='text-muted-foreground mx-auto max-w-[700px] md:text-xl'>
+                Our platform has helped countless businesses achieve their
+                goals. Hear what our customers have to say.
+              </p>
+              <div className='mt-6'>
+                <a
+                  href='#'
+                  className='bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary inline-flex h-9 items-center justify-center rounded-md px-4 py-2 text-sm font-medium shadow transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2'
+                >
+                  Get Started
+                </a>
+              </div>
+            </div>
+            <div className='flex flex-col items-start space-y-4'>
+              <Image
+                src='https://generated.vusercontent.net/placeholder.svg'
+                width='550'
+                height='310'
+                alt='Hero'
+                className='mx-auto aspect-video overflow-hidden rounded-xl object-cover object-center sm:w-full'
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+```
+
+> Ohh!! BTW I am using [v0.dev](https://v0.dev) by Vercel to generate this UI. Give it a try if you haven't already it's really awesome
